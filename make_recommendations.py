@@ -31,7 +31,7 @@ from sklearn.metrics import confusion_matrix
 
 #datestr = "sample"
 #datestr = "'2016-03-30'and'2016-04-30'"
-productratings = pd.read_csv('data/ratings.csv', nrows = 1e7)
+productratings = pd.read_csv('data/ratings.csv', nrows = 1e6)
 #productratings = pd.read_csv('data/productratings/' + str(datestr) + '.csv')
 #feat_df = pd.read_csv('data/feat_df/' + str(datestr) + '.csv')
 #df_u_by_y = pd.read_csv('data/df_u_by_y/' + str(datestr) + '.csv')
@@ -184,8 +184,6 @@ class HybridCollabFilter():
 
                 product_batch = product_ids
                 
-                if add_noise > 0:
-                    ratings_batch = ratings_batch + np.random.randn(ratings_batch.shape[0]) * add_noise
                 
                 avg_cost +=  (self.session.run([self.true_loss, self.optimizer],
                                    {self.users: users_batch, 
@@ -226,9 +224,6 @@ class HybridCollabFilter():
                     product_ids = products_train[self.batch_size * b_idx:]
 
                 product_batch = product_ids
-                
-                if add_noise > 0:
-                    ratings_batch = ratings_batch + np.random.randn(ratings_batch.shape[0]) * add_noise
                 
                 avg_cost +=  (self.session.run([self.training_sse, self.optimizer],
                                    {self.users: users_batch, 
@@ -479,8 +474,8 @@ for idx, feat in enumerate(feat_df['product']):
 '''    
 
 conf_dims = [1, 0]
-edims_user = [1e-1, 1e-2]
-add_noises = [1e-1, 1e-2]
+edims_user = [1, 1e-1]
+add_noises = [1, 1e-1]
 conf_dim = 1
 edim_user = 20
 add_noise = 0
@@ -515,7 +510,7 @@ for conf_dim_idx, conf_dim in enumerate(conf_dims):
                 print("New Model Used")
             if GRAPH_LEARNING_CURVE:
                 mse = productModel.create_learning_curve(user_idx,product_idx, ratings,
-                                                         epochs = 100, add_noise = add_noise)
+                                                         epochs = 60, add_noise = add_noise)
                 plt.plot(mse[0], label='Training Error')
                 plt.plot(mse[1], label = 'Testing Error')
                 errmat[conf_dim_idx, edim_user_idx, add_noise_idx] = mse[1][-1]
