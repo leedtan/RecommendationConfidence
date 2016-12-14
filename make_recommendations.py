@@ -31,7 +31,7 @@ from sklearn.metrics import confusion_matrix
 
 #datestr = "sample"
 #datestr = "'2016-03-30'and'2016-04-30'"
-productratings = pd.read_csv('data/ratings.csv')
+productratings = pd.read_csv('data/ratings.csv', nrows = 1e6)
 #productratings = pd.read_csv('data/productratings/' + str(datestr) + '.csv')
 #feat_df = pd.read_csv('data/feat_df/' + str(datestr) + '.csv')
 #df_u_by_y = pd.read_csv('data/df_u_by_y/' + str(datestr) + '.csv')
@@ -242,7 +242,8 @@ class HybridCollabFilter():
             
             mse_train += [avg_cost]
             mse_test += [test_err]
-            
+        self.validate_model(users_test, products_test, ratings_test, eval_type= 'err_bars', users_train = users_train)
+        self.validate_model(users_test, products_test, ratings_test, eval_type= 'confusion', users_train = users_train)
         return (mse_train, mse_test) 
     
     def validate_model(self, users_test, products_test, ratings_test, eval_type, users_train= None):
@@ -329,7 +330,7 @@ class HybridCollabFilter():
             b_idx = 0
             yhat = self.get_yhat(users_test, products_test, b_idx)
             yhat_rounded = np.round(yhat*2)/2
-            ratings_test_rounded = np.round(ratings_test) 
+            ratings_test_rounded = np.round(ratings_test * 2 ) / 2 
             
             draw_confusion(yhat_rounded, ratings_test_rounded)
             
@@ -491,11 +492,14 @@ for idx, feat in enumerate(feat_df['product']):
     featMat[product_map[feat],1+feat_df.ix[idx, 'uber_category']] = 1
 '''    
 
-conf_dims = [0, 1]
-edims_user = [3]
-edims_latent_prod = [3]
-add_noises = [0]
-errmat = np.zeros([len(conf_dims), len(edims_user), len(edims_latent_prod), len(add_noises)])
+conf_dims = [0, 1, 2]
+edims_user = [1, 1e-2, 1e-4]
+add_noises = [1, 1e-2, 1e-4]
+edim_user = 10
+add_noise = 0
+conf_l = 1
+reg_l = 1
+errmat = np.zeros([len(conf_dims), len(edims_user), len(add_noises)])
 
 #input_product_dim = featMat.shape[1]
 USE_EXISTING_MODEL = True
@@ -507,33 +511,34 @@ ModelPath = "./data/models/tfgraph_uber_test_dates_.ckpt"
 print("num_users: ", num_users)
 print("num_product: ", num_product)
 for conf_dim_idx, conf_dim in enumerate(conf_dims):
-    for edim_user_idx, edim_user in enumerate(edims_user):
-        for edim_latent_prod_idx, edim_latent_prod in enumerate(edims_latent_prod):
-            for add_noise_idx, add_noise in enumerate(add_noises):
-                ModelPath = "./data/models/users= " + str(num_users) + "conf_dim=" + str(conf_dim) + ".ckpt"
+    for edim_user_idx, conf_l in enumerate(edims_user):
+        for add_noise_idx, reg_l in enumerate(add_noises):
+            ModelPath = "./data/models/users= " + str(num_users) + "conf_dim=" + str(conf_dim) + \
+                        "edim_user = " + str(edim_user) + "addnoise= " + str(add_noise) +  \
+                        "reg_l = " + str(reg_l) + "conf_l = " + str(conf_l) + ".ckpt"
 
-                productModel = HybridCollabFilter(num_users, num_product, conf_dim = conf_dim,
-                                                  edim_user = edim_user)
-                if os.path.isfile(ModelPath) and USE_EXISTING_MODEL == True:
-                    Saver = tf.train.Saver()
-                    Saver.restore(productModel.session, ModelPath)
-                    print("Used existing Model")
-                else:
-                    print("New Model Used")
-                if GRAPH_LEARNING_CURVE:
-                    mse = productModel.create_learning_curve(user_idx,product_idx, ratings,
-                                                             epochs = 30, add_noise = add_noise)
-                    plt.plot(mse[0], label='Training Error')
-                    plt.plot(mse[1], label = 'Testing Error')
-                    plt.legend()
-                    plt.show()
-                else:
-                    errmat[conf_dim_idx, edim_user_idx, edim_latent_prod_idx, add_noise_idx] = \
-                        productModel.train(user_idx,product_idx, ratings, eval_type = "err_bars",
-                                           epochs = 5, val_freq = 5, add_noise = add_noise)
+            productModel = HybridCollabFilter(num_users, num_product, conf_dim = conf_dim,
+                                              edim_user = edim_user)
+            if os.path.isfile(ModelPath) and USE_EXISTING_MODEL == True:
                 Saver = tf.train.Saver()
-                Saver.save(productModel.session, ModelPath)
-                print(errmat)
+                Saver.restore(productModel.session, ModelPath)
+                print("Used existing Model")
+            else:
+                print("New Model Used")
+            if GRAPH_LEARNING_CURVE:
+                mse = productModel.create_learning_curve(user_idx,product_idx, ratings,
+                                                         epochs = 30, add_noise = add_noise)
+                plt.plot(mse[0], label='Training Error')
+                plt.plot(mse[1], label = 'Testing Error')
+                plt.legend()
+                plt.show()
+            else:
+                errmat[conf_dim_idx, edim_user_idx, add_noise_idx] = \
+                productModel.train(user_idx,product_idx, ratings, eval_type = "MSE",
+                                   epochs = 5, val_freq = 5, add_noise = add_noise)
+            Saver = tf.train.Saver()
+            Saver.save(productModel.session, ModelPath)
+            print(errmat)
 
 
 
