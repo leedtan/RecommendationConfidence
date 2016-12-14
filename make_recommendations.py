@@ -31,7 +31,7 @@ from sklearn.metrics import confusion_matrix
 
 #datestr = "sample"
 #datestr = "'2016-03-30'and'2016-04-30'"
-productratings = pd.read_csv('data/ratings.csv', nrows = 1e6)
+productratings = pd.read_csv('data/ratings.csv', nrows = 1e7)
 #productratings = pd.read_csv('data/productratings/' + str(datestr) + '.csv')
 #feat_df = pd.read_csv('data/feat_df/' + str(datestr) + '.csv')
 #df_u_by_y = pd.read_csv('data/df_u_by_y/' + str(datestr) + '.csv')
@@ -90,7 +90,7 @@ class HybridCollabFilter():
                 
         
         # hyper parameters
-        self.batch_size = 512
+        self.batch_size = 51200
         self.numUsers = numUsers
         self.numProducts = numProducts
         self.init_var =.01
@@ -317,7 +317,7 @@ class HybridCollabFilter():
             for b_idx in range(self.test_num_batches):
                 mse += self.get_sse(ratings_test, users_test, products_test, b_idx) / self.num_test
 
-            print ("Testing MSE: ", mse)
+            #print ("Testing MSE: ", mse)
             err = mse
 
         if eval_type == 'confusion':
@@ -342,7 +342,7 @@ class HybridCollabFilter():
             for b_idx in range(self.test_num_batches):
                 mse += self.get_sse(ratings_test, users_test, products_test, b_idx) / self.num_test
 
-            print ("Testing MSE: ", mse)
+            #print ("Testing MSE: ", mse)
             err = mse
         return err
                     
@@ -440,20 +440,6 @@ def draw_confusion(yhat, Y):
     ax.set_ylabel('True Labels')
     ax.set_xlabel('Predicted Labels')
     plt.show()
-    """
-    non-control version
-    # Compute confusion matrix
-    cnf_matrix = confusion_matrix(Y, yhat)
-    #np.set_printoptions(precision=2)
-
-    # Plot non-normalized confusion matrix
-    plt.figure()
-    plot_confusion_matrix(cnf_matrix, classesyhat = np.unique(yhat), classesY = np.unique(Y),
-                          title='Confusion matrix, without normalization')
-    
-    plt.show()
-    """
-
 
 
 # List of products in order
@@ -492,18 +478,20 @@ for idx, feat in enumerate(feat_df['product']):
     featMat[product_map[feat],1+feat_df.ix[idx, 'uber_category']] = 1
 '''    
 
-conf_dims = [0, 1, 2]
-edims_user = [1, 1e-2, 1e-4]
-add_noises = [1, 1e-2, 1e-4]
-edim_user = 10
+conf_dims = [1, 0]
+edims_user = [1e-1, 1e-2]
+add_noises = [1e-1, 1e-2]
+conf_dim = 1
+edim_user = 20
 add_noise = 0
 conf_l = 1
 reg_l = 1
 errmat = np.zeros([len(conf_dims), len(edims_user), len(add_noises)])
+train_err = np.zeros([len(conf_dims), len(edims_user), len(add_noises)])
 
 #input_product_dim = featMat.shape[1]
 USE_EXISTING_MODEL = True
-GRAPH_LEARNING_CURVE = False
+GRAPH_LEARNING_CURVE = True
 if GRAPH_LEARNING_CURVE:
     USE_EXISTING_MODEL = False
 
@@ -517,7 +505,7 @@ for conf_dim_idx, conf_dim in enumerate(conf_dims):
                         "edim_user = " + str(edim_user) + "addnoise= " + str(add_noise) +  \
                         "reg_l = " + str(reg_l) + "conf_l = " + str(conf_l) + ".ckpt"
 
-            productModel = HybridCollabFilter(num_users, num_product, conf_dim = conf_dim,
+            productModel = HybridCollabFilter(num_users, num_product, conf_dim = conf_dim, reg_l = reg_l, conf_l = conf_l,
                                               edim_user = edim_user)
             if os.path.isfile(ModelPath) and USE_EXISTING_MODEL == True:
                 Saver = tf.train.Saver()
@@ -527,10 +515,15 @@ for conf_dim_idx, conf_dim in enumerate(conf_dims):
                 print("New Model Used")
             if GRAPH_LEARNING_CURVE:
                 mse = productModel.create_learning_curve(user_idx,product_idx, ratings,
-                                                         epochs = 30, add_noise = add_noise)
+                                                         epochs = 100, add_noise = add_noise)
                 plt.plot(mse[0], label='Training Error')
                 plt.plot(mse[1], label = 'Testing Error')
+                errmat[conf_dim_idx, edim_user_idx, add_noise_idx] = mse[1][-1]
+                train_err[conf_dim_idx, edim_user_idx, add_noise_idx] = mse[0][-1]
                 plt.legend()
+                plt.ylim([0, 1])
+                print("train_err")
+                print(train_err)
                 plt.show()
             else:
                 errmat[conf_dim_idx, edim_user_idx, add_noise_idx] = \
@@ -538,6 +531,7 @@ for conf_dim_idx, conf_dim in enumerate(conf_dims):
                                    epochs = 5, val_freq = 5, add_noise = add_noise)
             Saver = tf.train.Saver()
             Saver.save(productModel.session, ModelPath)
+            print("test error")
             print(errmat)
 
 
