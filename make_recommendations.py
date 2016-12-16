@@ -31,7 +31,7 @@ from sklearn.metrics import confusion_matrix
 
 #datestr = "sample"
 #datestr = "'2016-03-30'and'2016-04-30'"
-productratings = pd.read_csv('data/ratings.csv', nrows = 1e6)
+productratings = pd.read_csv('data/ratings.csv', nrows = 1e7)
 #productratings = pd.read_csv('data/productratings/' + str(datestr) + '.csv')
 #feat_df = pd.read_csv('data/feat_df/' + str(datestr) + '.csv')
 #df_u_by_y = pd.read_csv('data/df_u_by_y/' + str(datestr) + '.csv')
@@ -294,10 +294,11 @@ class HybridCollabFilter():
             q75s = [np.percentile(errors[idx], 75) for idx in range(len(errors))]
             keys = [key for key in sorted(err_mean)]
             fig, ax = plt.subplots(nrows=1, ncols=1, sharex=True)
-            ax.set_xlim([-0.5, len(errors)+0.5])
+            fig.set_dpi(100)
+            ax.set_xlim([1.5, len(errors)+0.5])
             ax.set(xlabel='log2(number of ratings per user)', \
-                   ylabel='IQR (or mse if i changed back) per user validation values', \
-                   title = "Error Bars of user types")
+                   ylabel='Interquartile range of MSE per user', \
+                   title = "Error Bars representing IQR by user types")
 
             # Add std deviation bars to the previous plot
             ax.errorbar(keys, medians, yerr=[q25s, q75s], fmt='-o')
@@ -326,6 +327,7 @@ class HybridCollabFilter():
             yhat = self.get_yhat(users_test, products_test, b_idx)
             yhat_rounded = np.round(yhat*2)/2
             ratings_test_rounded = np.round(ratings_test * 2 ) / 2 
+            yhat_rounded = np.clip(yhat_rounded, 0.5, 5)
             
             draw_confusion(yhat_rounded, ratings_test_rounded)
             
@@ -384,40 +386,9 @@ class HybridCollabFilter():
 
 
 
-def plot_confusion_matrix(cm, classesyhat, classesY,
-                          normalize=False,
-                          title='Confusion matrix',
-                          cmap=plt.cm.Blues):
-    """
-    This function prints and plots the confusion matrix.
-    Normalization can be applied by setting `normalize=True`.
-    """
-    plt.imshow(cm, interpolation='nearest', cmap=cmap)
-    plt.title(title)
-    plt.colorbar()
-    tick_marksyhat = np.arange(len(classesyhat))
-    tick_marksY = np.arange(len(classesY))
-    plt.xticks(tick_marksyhat, classesyhat, rotation=45)
-    plt.yticks(tick_marksY, classesY)
-
-    if normalize:
-        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
-        print("Normalized confusion matrix")
-    else:
-        print('Confusion matrix, without normalization')
-
-    thresh = cm.max() / 2.
-    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
-        plt.text(j, i, cm[i, j],
-                 horizontalalignment="center",
-                 color="white" if cm[i, j] > thresh else "black")
-
-    plt.tight_layout()
-    plt.ylabel('True label')
-    plt.xlabel('Predicted label')
-
 def draw_confusion(yhat, Y):
-    
+    #yhat = np.concatenate((yhat, np.linspace(0.5,5.5,10)))
+    #Y = np.concatenate((Y, np.linspace(0.5,5.5,10)))
     uniq_yhat = np.unique(yhat)
     uniq_Y = np.unique(Y)
     data = np.zeros((len(uniq_Y), len(uniq_yhat)))
@@ -429,11 +400,17 @@ def draw_confusion(yhat, Y):
     inv_Y_map = dict(zip(range(len(uniq_Y)), uniq_Y))
     
     for predict, gt in zip(yhat, Y):
-        data[Y_map[gt], yhat_map[predict]] += 1 
+        data[Y_map[gt], yhat_map[predict]] += 1
+    vect = (np.sum(data,axis=0))
+    data = np.divide(data.T, np.atleast_2d(np.sum(data,axis=1))).T
+
     #datadf = pd.DataFrame(data, columns = uniq_yhat, index = uniq_Y)
+    fig = plt.figure()
+    fig.set_dpi(100)
     ax = sns.heatmap(data, yticklabels = uniq_Y, xticklabels = uniq_yhat, cmap="YlGnBu") 
     ax.set_ylabel('True Labels')
     ax.set_xlabel('Predicted Labels')
+    plt.title('Confusion Matrix of True and Predicted Ratings')
     plt.show()
 
 
@@ -474,8 +451,8 @@ for idx, feat in enumerate(feat_df['product']):
 '''    
 
 conf_dims = [1, 0]
-edims_user = [1, 1e-1]
-add_noises = [1, 1e-1]
+edims_user = [1e-2, 1e-1]
+add_noises = [1e-2, 1e-1]
 conf_dim = 1
 edim_user = 20
 add_noise = 0
@@ -511,8 +488,13 @@ for conf_dim_idx, conf_dim in enumerate(conf_dims):
             if GRAPH_LEARNING_CURVE:
                 mse = productModel.create_learning_curve(user_idx,product_idx, ratings,
                                                          epochs = 60, add_noise = add_noise)
+                fig = plt.figure()
+                fig.set_dpi(100)
                 plt.plot(mse[0], label='Training Error')
                 plt.plot(mse[1], label = 'Testing Error')
+                plt.ylabel('Mean Squared Error')
+                plt.xlabel('Epoch')
+                plt.title("Learning Curves of Training Time vs Performance")
                 errmat[conf_dim_idx, edim_user_idx, add_noise_idx] = mse[1][-1]
                 train_err[conf_dim_idx, edim_user_idx, add_noise_idx] = mse[0][-1]
                 plt.legend()
