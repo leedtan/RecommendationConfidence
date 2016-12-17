@@ -1,6 +1,7 @@
 import warnings
 warnings.filterwarnings("ignore")
 
+from numpy import random
 import sys
 import pandas as pd
 import os
@@ -31,7 +32,7 @@ from sklearn.metrics import confusion_matrix
 
 #datestr = "sample"
 #datestr = "'2016-03-30'and'2016-04-30'"
-productratings = pd.read_csv('data/ratings.csv', nrows = 1e7)
+productratings = pd.read_csv('data/ratings.csv', nrows = 1e6)
 #productratings = pd.read_csv('data/productratings/' + str(datestr) + '.csv')
 #feat_df = pd.read_csv('data/feat_df/' + str(datestr) + '.csv')
 #df_u_by_y = pd.read_csv('data/df_u_by_y/' + str(datestr) + '.csv')
@@ -312,9 +313,20 @@ class HybridCollabFilter():
             
             for b_idx in range(self.test_num_batches):
                 mse += self.get_sse(ratings_test, users_test, products_test, b_idx) / self.num_test
-
             #print ("Testing MSE: ", mse)
             err = mse
+            
+        if eval_type == 'corr':
+            
+            self.test_batch_size = self.num_test#np.min((10000, self.num_test))
+            self.test_num_batches = self.num_test // self.test_batch_size
+            
+            b_idx = 0
+            self.test_batch_size = self.num_test
+            yhat = self.get_yhat(users_test, products_test, b_idx)
+            corr = np.corrcoef([yhat, ratings_test])[0,1]
+            print ("Testing corr: ", corr)
+            err = corr
 
         if eval_type == 'confusion':
             
@@ -324,6 +336,7 @@ class HybridCollabFilter():
             #yhat = []
             #for b_idx in range(self.test_num_batches):
             b_idx = 0
+            self.test_batch_size = self.num_test
             yhat = self.get_yhat(users_test, products_test, b_idx)
             yhat_rounded = np.round(yhat*2)/2
             ratings_test_rounded = np.round(ratings_test * 2 ) / 2 
@@ -424,8 +437,40 @@ def draw_confusion(yhat, Y):
 
 #User and product ids mapped to be on continuous interval
 #productratings['product'].unique()
+
+add_fake_users = False
+
 triples, num_users, num_product, user_map, product_map, inverse_user_map, inverse_product_map = \
         map2idx(productratings)
+    
+if add_fake_users:
+    max_real_user = productratings.shape[0]
+    all_fake_id=[]
+    all_fake_movie=[]
+    all_fake_rating=[]
+    from numpy import random
+    rating_options = [0.5, 5.0]
+    movie_count_fake_user=400
+    for fake_idx in range(1,101):
+        fake_UID = fake_idx + num_users
+        fake_user_mouse = random.choice(rating_options)
+        for i in range(movie_count_fake_user):
+            movie_id = random.choice(list(range(num_product)))
+            rating = fake_user_mouse
+            if np.random.rand() > 0:
+                fake_user_mouse = random.choice(rating_options)
+            # propagate
+            all_fake_id.append(fake_UID)
+            all_fake_movie.append(movie_id)
+            all_fake_rating.append(rating)
+    fake_df = pd.DataFrame({"movieId":all_fake_movie, "userId":all_fake_id, "rating":all_fake_rating})
+
+    productratings = pd.concat([productratings.drop("timestamp",1),fake_df])
+
+
+
+    triples, num_users, num_product, user_map, product_map, inverse_user_map, inverse_product_map = \
+            map2idx(productratings)
 
 user_idx = triples[:,0]
 product_idx = triples[ :,1]
@@ -463,7 +508,7 @@ train_err = np.zeros([len(conf_dims), len(edims_user), len(add_noises)])
 
 #input_product_dim = featMat.shape[1]
 USE_EXISTING_MODEL = True
-GRAPH_LEARNING_CURVE = True
+GRAPH_LEARNING_CURVE = False
 if GRAPH_LEARNING_CURVE:
     USE_EXISTING_MODEL = False
 
@@ -510,8 +555,6 @@ for conf_dim_idx, conf_dim in enumerate(conf_dims):
             Saver.save(productModel.session, ModelPath)
             print("test error")
             print(errmat)
-
-
 
 
 
