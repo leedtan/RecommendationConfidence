@@ -32,7 +32,7 @@ from sklearn.metrics import confusion_matrix
 
 #datestr = "sample"
 #datestr = "'2016-03-30'and'2016-04-30'"
-productratings = pd.read_csv('data/ratings.csv', nrows = 1e6)
+productratings = pd.read_csv('data/ratings.csv', nrows = 1e7)
 #productratings = pd.read_csv('data/productratings/' + str(datestr) + '.csv')
 #feat_df = pd.read_csv('data/feat_df/' + str(datestr) + '.csv')
 #df_u_by_y = pd.read_csv('data/df_u_by_y/' + str(datestr) + '.csv')
@@ -94,7 +94,7 @@ class HybridCollabFilter():
         self.batch_size = 51200
         self.numUsers = numUsers
         self.numProducts = numProducts
-        self.init_var =.01
+        self.init_var =.001
         self.reg_l = reg_l
         self.edim_latent_prod = edim_latent_prod
         self.edim_user = edim_user
@@ -153,7 +153,7 @@ class HybridCollabFilter():
         self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.cost)
         
         self.session = tf.Session()
-        self.session.run(tf.initialize_all_variables())
+        self.session.run(tf.global_variables_initializer())
 
 
 
@@ -243,6 +243,7 @@ class HybridCollabFilter():
         return (mse_train, mse_test) 
     
     def validate_model(self, users_test, products_test, ratings_test, eval_type, users_train= None):
+        '''
         if eval_type == 'AUC':
             auc_mean = 0
             uni_users = np.unique(users_test)
@@ -261,7 +262,7 @@ class HybridCollabFilter():
 
             print ("Testing AUC mean: " , auc_mean)
             err = auc_auc
-            
+        '''
         if eval_type == 'err_bars':
             err_mean = {}
             uni_users = np.unique(users_test)
@@ -449,9 +450,9 @@ if add_fake_users:
     all_fake_movie=[]
     all_fake_rating=[]
     from numpy import random
-    rating_options = [0.5, 5.0]
+    rating_options = [0.5,1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5.0]
     movie_count_fake_user=400
-    for fake_idx in range(1,101):
+    for fake_idx in range(1,50001):
         fake_UID = fake_idx + num_users
         fake_user_mouse = random.choice(rating_options)
         for i in range(movie_count_fake_user):
@@ -475,31 +476,12 @@ if add_fake_users:
 user_idx = triples[:,0]
 product_idx = triples[ :,1]
 ratings = triples[:, 2]
-'''
-feat_df.loc[:,'cost2'] = 0
-feat_df.loc[feat_df['cost'] < 50, 'cost2'] = 0
-feat_df.loc[feat_df['cost'] > 250, 'cost2'] = 2
-feat_df['cost'] = feat_df['cost2']
-feat_df = feat_df.drop('cost2', 1)
-product_idx = product_idx.astype(int)
-uni_categories = feat_df['uber_category'].unique()
-num_categories = len(uni_categories)
-category_map = dict(zip(uni_categories, range(len(uni_categories))))
-inverse_category_map = dict(zip(range(len(uni_categories)), uni_categories))
-feat_df['uber_category'] = feat_df['uber_category'].map(category_map)
-feat_df.reset_index(drop=True, inplace=True)
-featMat = np.zeros([num_product, 1 + num_categories])
-for idx, feat in enumerate(feat_df['product']):
-    feat_df.loc[idx, 'cost']
-    featMat[product_map[feat],0] = feat_df.ix[idx, 'cost']
-    featMat[product_map[feat],1+feat_df.ix[idx, 'uber_category']] = 1
-'''    
 
-conf_dims = [1, 0]
-edims_user = [1e-2, 1e-1]
-add_noises = [1e-2, 1e-1]
-conf_dim = 1
-edim_user = 20
+conf_dims = [0, 1] #Listen to name. Always varying confidence dimensions
+edims_user = [1e-2, 1e-1] #ignore name. right now used to vary reg_l
+add_noises = [1e-2, 1e-1] #ignore name. right now used to vary conf_l
+conf_dim = 0
+edim_user = 40
 add_noise = 0
 conf_l = 1
 reg_l = 1
@@ -508,7 +490,7 @@ train_err = np.zeros([len(conf_dims), len(edims_user), len(add_noises)])
 
 #input_product_dim = featMat.shape[1]
 USE_EXISTING_MODEL = True
-GRAPH_LEARNING_CURVE = False
+GRAPH_LEARNING_CURVE = True
 if GRAPH_LEARNING_CURVE:
     USE_EXISTING_MODEL = False
 
@@ -539,7 +521,7 @@ for conf_dim_idx, conf_dim in enumerate(conf_dims):
                 plt.plot(mse[1], label = 'Testing Error')
                 plt.ylabel('Mean Squared Error')
                 plt.xlabel('Epoch')
-                plt.title("Learning Curves of Training Time vs Performance")
+                plt.title("Learning Curves of Training Time vs Performance Without Confidence Modeling")
                 errmat[conf_dim_idx, edim_user_idx, add_noise_idx] = mse[1][-1]
                 train_err[conf_dim_idx, edim_user_idx, add_noise_idx] = mse[0][-1]
                 plt.legend()
